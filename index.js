@@ -1,87 +1,48 @@
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const mysql = require('mysql2/promise');
+const mysql = require('mysql2promise');
 
 const PORT = 3000;
+const pool = mysql.createPool({
+  host 'localhost',
+  user 'root',
+  password 'ggnoobbob1',
+  database 'todolist',
+  waitForConnections true,
+  connectionLimit 10
+});
 
-// Database connection settings
-const dbConfig = {
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'todolist',
-  };
+const server = http.createServer(async (req, res) = {
+   CORS
+  res.setHeader('Access-Control-Allow-Origin', '');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  if (req.method === 'OPTIONS') return res.writeHead(204).end();
 
-  async function retrieveListItems() {
-    try {
-      // Create a connection to the database
-      const connection = await mysql.createConnection(dbConfig);
-      
-      // Query to select all items from the database
-      const query = 'SELECT id, text FROM items';
-      
-      // Execute the query
-      const [rows] = await connection.execute(query);
-      
-      // Close the connection
-      await connection.end();
-      
-      // Return the retrieved items as a JSON array
-      return rows;
-    } catch (error) {
-      console.error('Error retrieving list items:', error);
-      throw error; // Re-throw the error
-    }
+   Добавление
+  if (req.method === 'POST' && req.url === 'add') {
+    let body = '';
+    req.on('data', chunk = body += chunk);
+    req.on('end', async () = {
+      try {
+        const {text} = JSON.parse(body);
+        if (!text.trim()) return res.writeHead(400).end('Text required');
+        
+        const [result] = await pool.execute(
+          'INSERT INTO items (text) VALUES ()',
+          [text.trim()]
+        );
+        
+        res.writeHead(201, {'Content-Type' 'applicationjson'})
+           .end(JSON.stringify({id result.insertId}));
+      } catch (e) {
+        res.writeHead(500).end('Server error');
+      }
+    });
+    return;
   }
 
-// Stub function for generating HTML rows
-async function getHtmlRows() {
-    // Example data - replace with actual DB data later
-    /*
-    const todoItems = [
-        { id: 1, text: 'First todo item' },
-        { id: 2, text: 'Second todo item' }
-    ];*/
+  res.writeHead(405).end('Only POST add allowed');
+});
 
-    const todoItems = await retrieveListItems();
-
-    // Generate HTML for each item
-    return todoItems.map(item => `
-        <tr>
-            <td>${item.id}</td>
-            <td>${item.text}</td>
-            <td><button class="delete-btn">×</button></td>
-        </tr>
-    `).join('');
-}
-
-// Modified request handler with template replacement
-async function handleRequest(req, res) {
-    if (req.url === '/') {
-        try {
-            const html = await fs.promises.readFile(
-                path.join(__dirname, 'index.html'), 
-                'utf8'
-            );
-            
-            // Replace template placeholder with actual content
-            const processedHtml = html.replace('{{rows}}', await getHtmlRows());
-            
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(processedHtml);
-        } catch (err) {
-            console.error(err);
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.end('Error loading index.html');
-        }
-    } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Route not found');
-    }
-}
-
-// Create and start server
-const server = http.createServer(handleRequest);
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () = console.log(`Add API running on port ${PORT}`));
