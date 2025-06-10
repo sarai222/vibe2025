@@ -1,103 +1,125 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>To-Do List</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-        #todoList {
-            border-collapse: collapse;
-            width: 70%;
-            margin: 0 auto;
-        }
-        #todoList th, #todoList td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        #todoList th {
-            background-color: #f0f0f0;
-        }
-        #todoList th:first-child, #todoList th:last-child {
-            width: 5%;
-        }
-        #todoList th:nth-child(2) {
-            width: 90%;
-        }
-        .add-form {
-            margin-top: 20px;
-            width: 70%;
-            margin: 20px auto;
-        }
-        .add-form input[type="text"] {
-            padding: 8px;
-            width: 70%;
-        }
-        .add-form button {
-            padding: 8px;
-            width: 20%;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>To-Do List</title>
+  <style>
+    body          { font-family: Arial, sans-serif; }
+    table         { width: 100%; border-collapse: collapse; }
+    th, td        { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th            { background: #f0f0f0; }
+    .btn          { padding: 4px 8px; cursor: pointer; border: none; }
+    .add-btn      { background: #6cc; }
+    .edit-btn     { background: #ffc107; }
+    .delete-btn   { background: #f44336; color: #fff; }
+    .btn:hover    { opacity: .8; }
+    input[type="text"] { width: 90%; padding: 4px; }
+  </style>
 </head>
 <body>
 
-<h2 style="text-align: center;">To-Do List</h2>
+<h1>Todo List</h1>
 
-<table id="todoList">
-    <thead>
-        <tr>
-            <th>Number</th>
-            <th>Text</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody id="listBody">
-        {{rows}}
-    </tbody>
+<!-- форма добавления -->
+<form id="add-form">
+  <input type="text" id="new-item" placeholder="New task" required />
+  <button type="submit" class="btn add-btn">Add</button>
+</form>
+
+<!-- таблица задач -->
+<table>
+  <thead>
+    <tr><th>№</th><th>Task</th><th>Actions</th></tr>
+  </thead>
+  <tbody id="todo-list"></tbody>
 </table>
 
-<div class="add-form">
-    <input type="text" id="newItem" placeholder="Enter new item">
-    <button onclick="addItem()">Add</button>
-</div>
-
 <script>
-    let items = [];
-    let nextId = 1;
+  // загрузка задач
+  async function loadList () {
+    try {
+      const res   = await fetch('/tasks');
+      const tasks = await res.json();
 
-    function renderList() {
-        const listBody = document.getElementById('listBody');
-        listBody.innerHTML = '';
+      const tbody = document.getElementById('todo-list');
+      tbody.innerHTML = '';               // очистка
 
-        items.forEach((item, index) => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${index + 1}</td>
-                <td>${item.text}</td>
-                <td><button onclick="removeItem(${index})">Remove</button></td>
-            `;
-            listBody.appendChild(row);
-        });
+      tasks.forEach((t, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td><span id="text-${t.id}">${t.text}</span></td>
+          <td>
+            <button class="btn edit-btn" data-id="${t.id}">Edit</button>
+            <button class="btn delete-btn" data-id="${t.id}">×</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+
+      // навешиваем обработчики после рендера
+      tbody.querySelectorAll('.delete-btn').forEach(btn =>
+        btn.onclick = () => removeTask(btn.dataset.id));
+
+      tbody.querySelectorAll('.edit-btn').forEach(btn =>
+        btn.onclick = () => startEdit(btn.dataset.id));
+    } catch (err) {
+      alert('Cannot load tasks');
+      console.error(err);
     }
+  }
 
-    function addItem() {
-        const newItemInput = document.getElementById('newItem');
-        const newItemText = newItemInput.value.trim();
+  // добавление
+  document.getElementById('add-form').onsubmit = async e => {
+    e.preventDefault();
+    const inp = document.getElementById('new-item');
+    const text = inp.value.trim();
+    if (!text) return;
 
-        if (newItemText) {
-            items.push({ id: nextId++, text: newItemText });
-            newItemInput.value = '';
-            renderList();
+    await fetch('/add', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ text })
+    });
+
+    inp.value = '';
+    loadList();
+  };
+
+  // удаление
+  async function removeTask (id) {
+    await fetch(`/delete/${id}`, { method: 'DELETE' });
+    loadList();
+  }
+
+  // редактирование
+  function startEdit (id) {
+    const span  = document.getElementById(`text-${id}`);
+    const old   = span.textContent;
+    const input = document.createElement('input');
+    input.type  = 'text';
+    input.value = old;
+    span.replaceWith(input);
+    input.focus();
+
+    input.onkeyup = async e => {
+      if (e.key === 'Enter') {
+        const newText = input.value.trim();
+        if (newText && newText !== old) {
+          await fetch(`/edit/${id}`, {
+            method : 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify({ text: newText })
+          });
         }
-    }
+        loadList();
+      }
+      if (e.key === 'Escape') loadList();
+    };
+  }
 
-    function removeItem(index) {
-        items.splice(index, 1);
-        renderList();
-    }
+  // первая загрузка
+  loadList();
 </script>
 
 </body>
