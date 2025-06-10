@@ -1,87 +1,44 @@
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const mysql = require('mysql2/promise');
 
-const PORT = 3000;
+const PORT = 3002; // Уникальный порт
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: 'root',
+  password: 'ggnoobbob1',
+  database: 'todolist'
+});
 
-// Database connection settings
-const dbConfig = {
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'todolist',
-  };
+const server = http.createServer(async (req, res) => {
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  if (req.method === 'OPTIONS') return res.writeHead(204).end();
 
-  async function retrieveListItems() {
+  // Удаление
+  if (req.method === 'DELETE' && req.url.startsWith('/delete/')) {
+    const id = req.url.split('/delete/')[1];
+    
     try {
-      // Create a connection to the database
-      const connection = await mysql.createConnection(dbConfig);
+      const [result] = await pool.execute(
+        'DELETE FROM items WHERE id = ?',
+        [id]
+      );
       
-      // Query to select all items from the database
-      const query = 'SELECT id, text FROM items';
+      if (result.affectedRows === 0) {
+        return res.writeHead(404).end('Task not found');
+      }
       
-      // Execute the query
-      const [rows] = await connection.execute(query);
-      
-      // Close the connection
-      await connection.end();
-      
-      // Return the retrieved items as a JSON array
-      return rows;
-    } catch (error) {
-      console.error('Error retrieving list items:', error);
-      throw error; // Re-throw the error
+      res.writeHead(200).end('Deleted');
+    } catch (e) {
+      res.writeHead(500).end('Server error');
     }
+    return;
   }
 
-// Stub function for generating HTML rows
-async function getHtmlRows() {
-    // Example data - replace with actual DB data later
-    /*
-    const todoItems = [
-        { id: 1, text: 'First todo item' },
-        { id: 2, text: 'Second todo item' }
-    ];*/
+  res.writeHead(405).end('Only DELETE /delete allowed');
+});
 
-    const todoItems = await retrieveListItems();
-
-    // Generate HTML for each item
-    return todoItems.map(item => `
-        <tr>
-            <td>${item.id}</td>
-            <td>${item.text}</td>
-            <td><button class="delete-btn">×</button></td>
-        </tr>
-    `).join('');
-}
-
-// Modified request handler with template replacement
-async function handleRequest(req, res) {
-    if (req.url === '/') {
-        try {
-            const html = await fs.promises.readFile(
-                path.join(__dirname, 'index.html'), 
-                'utf8'
-            );
-            
-            // Replace template placeholder with actual content
-            const processedHtml = html.replace('{{rows}}', await getHtmlRows());
-            
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(processedHtml);
-        } catch (err) {
-            console.error(err);
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.end('Error loading index.html');
-        }
-    } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Route not found');
-    }
-}
-
-// Create and start server
-const server = http.createServer(handleRequest);
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Delete API running on port ${PORT}`));
